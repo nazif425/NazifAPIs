@@ -9,8 +9,13 @@ https://docs.djangoproject.com/en/3.2/topics/settings/
 For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
-
+import os
+import environ
 from pathlib import Path
+
+env = environ.Env()
+# reading .env file
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +25,12 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure--px!cav-b6mg42f!qgp2wk*m5+p2k*b=isa2kbgc0))7s29&0s'
+SECRET_KEY = env("SECRET_KEY")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env("DEBUG")
 
-ALLOWED_HOSTS = ['Nazifapis.pythonanywhere.com']
+ALLOWED_HOSTS = env.list("ALLOWED_HOSTS", default=[''])
 
 
 # Application definition
@@ -37,6 +42,13 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'rest_framework.authtoken',
+    'rest_auth',
+    'django.contrib.sites',
+    'allauth',
+    'allauth.account',
+    'rest_auth.registration'
 ]
 
 MIDDLEWARE = [
@@ -75,8 +87,12 @@ WSGI_APPLICATION = 'NazifAPIs.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.mysql',
+        'NAME': env("DB_NAME"),
+        'USER': env("DB_USER"),
+        'PASSWORD': env("DB_PASSWORD", default=''),
+        'HOST': env("DB_HOST"),
+        'PORT': env("DB_PORT", default='')
     }
 }
 
@@ -98,6 +114,12 @@ AUTH_PASSWORD_VALIDATORS = [
         'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
     },
 ]
+
+REST_FRAMEWORK = {
+    'DEFAULT_PERMISSION_CLASS': [
+        'rest_framework.permissions.DjangoModelPermissionOrAnonReadOnly'
+    ]
+}
 
 
 # Internationalization
@@ -126,7 +148,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # default static files settings for PythonAnywhere.
 # see https://help.pythonanywhere.com/pages/DjangoStaticFiles for more info
-MEDIA_ROOT = '/home/Nazifapis/NazifAPIs/media'
-MEDIA_URL = '/media/'
-STATIC_ROOT = '/home/Nazifapis/NazifAPIs/static'
-STATIC_URL = '/static/'
+MEDIA_ROOT = env("MEDIA_ROOT", default=os.path.join(BASE_DIR, 'media'))
+MEDIA_URL = env("MEDIA_URL", default='/media/')
+STATIC_ROOT = env("STATIC_ROOT", default=os.path.join(BASE_DIR, 'static'))
+STATIC_URL = env("STATIC_URL", default='/static/')
