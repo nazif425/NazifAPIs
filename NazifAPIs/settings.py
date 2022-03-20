@@ -156,3 +156,5 @@ STATIC_ROOT = env("STATIC_ROOT", default=os.path.join(BASE_DIR, 'static'))
 STATIC_URL = env("STATIC_URL", default='/static/')
 
 AUTH_USER_MODEL = 'users.User'
+
+SITE_ID = 1
