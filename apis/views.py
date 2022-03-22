@@ -6,5 +6,5 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 # Create your views here.
 
 class Initialize(APIView):
-    def get(self, request, version="v1", format="json"):
+    def get(self, request, version="v1", format=None):
         return Response({'content': 'welcome to IOT sheanut weighing device API'}, status=status.HTTP_200_OK)
