@@ -3,11 +3,14 @@ from django.conf import settings
 from django.utils import timezone
 
 ACTION = (
-    ("DELETE RECORDS", "Delete account records"),
-    ("UPDATE RECORDS", "Create account records"),
-    ("SEND SMS", "Send SMS to buyers"),
+    ("GET RECORDS", "Retrive account records"),
+    ("UPDATE RECORDS", "Update account records"),
     ("ADD CONTACT", "Add Contact"),
-    ("RETRIEVE CONTACTS", "Retrieve contacts"),
+    ("GET CONTACT", "Retrive Contact"),
+    ("UPDATE CONTACT", "Update Contact"),
+    ("DELETE CONTACT", "Delete Contact"),
+    ("GET RATE", "Retrive Rate data"),
+    ("UPDATE RATE", "Update Rate data"),
     ("RETRIEVE ACCOUNT DETAILS", "Retrieve account details")
 )
 
@@ -24,12 +27,21 @@ CURRENCIES = (
 # Create your models here.
 
 class Device(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    device_id = models.CharField(max_length=30)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
+    device_id = models.CharField(max_length=64, blank=False)
+    first_name = models.CharField(max_length=50, blank=False)
+    last_name = models.CharField(max_length=50, blank=False)
+    phone_number = models.CharField(max_length=14, blank=False)
+    password = models.CharField(max_length=255, blank=False)
+    contact_number = models.CharField(max_length=14, blank=True)
+    company_name = models.CharField(max_length=255, blank=True)
+    email = models.EmailField(blank=True)
+    address = models.CharField(max_length=255, blank=True)
+    description = models.TextField(blank=True)
     date_created = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return '%s device' % (self.user.get_full_name())
+        return '%s %s device' % (self.first_name, self.last_name)
 
 class OperationLog(models.Model):
     action = models.CharField(max_length=24, choices=ACTION, blank=False)
@@ -37,13 +49,14 @@ class OperationLog(models.Model):
     timestamp = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
-        return '%s %s' % (self.user.get_full_name(), self.action)
+        return '%s %s %s' % (self.first_name, self.last_name, self.action)
 
 class Contact(models.Model):
     device = models.ForeignKey(Device, on_delete=models.CASCADE)
-    first_name = models.CharField(max_length=30, blank=False)
-    last_name = models.CharField(max_length=30, blank=False)
+    first_name = models.CharField(max_length=50, blank=False)
+    last_name = models.CharField(max_length=50, blank=False)
     phone_number = models.CharField(max_length=14, blank=False)
+    notification = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     last_modified = models.DateTimeField(auto_now=True)
     
@@ -52,19 +65,19 @@ class Contact(models.Model):
 
 class Quantity(models.Model):
     device = models.ForeignKey(Device, on_delete=models.CASCADE)
-    available_quantity = models.CharField(max_length=20, blank=False)
+    available_quantity = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     unit = models.CharField(max_length=24, choices=UNITS, default=UNITS[0][0])
     last_modified = models.DateTimeField(auto_now=True)
     
     def __str__(self):
-        return '%s: %s%s' % (self.device.user.get_full_name(), self.available_quantity, self.unit)
+        return '%s %s: %s%s' % (self.first_name, self.last_name, self.available_quantity, self.unit)
 
 class Rate(models.Model):
-    quantity = models.IntegerField(default=0)
-    price = models.IntegerField(default=0)
+    quantity = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    price = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
     unit = models.CharField(max_length=10, choices=UNITS, default=UNITS[0][0])
     currency = models.CharField(max_length=24, choices=CURRENCIES, default=CURRENCIES[0][0])
-    active_rate = models.BooleanField(default=False, null=False)
+    active_rate = models.BooleanField(default=True)
     created = models.DateTimeField(auto_now_add=True)
     
     def __str__(self):
