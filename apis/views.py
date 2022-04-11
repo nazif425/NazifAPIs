@@ -4,6 +4,7 @@ from rest_framework import generics, mixins, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.pagination import PageNumberPagination
 from .serializers import DeviceSerializer, ContactSerializer, QuantitySerializer, RateSerializer, OperationLogSerializer
 from . models import Device, Contact, Quantity, Rate, OperationLog
 import os
@@ -15,7 +16,7 @@ def authenticate(self):
         deviceInstance = Device.objects.get(device_id=deviceId)
     except Device.DoesNotExist:
         return None
-    #Response(self.responseData, status=status.HTTP_401_OK)
+    #Response(self.responseData, status=401)
     return deviceInstance
 
 def authenticateAndreply(self):
@@ -40,7 +41,7 @@ class Status(APIView):
     def get(self, request, version="v1", format=None):
         device = authenticate(self);
         if not device:
-            Response(status=status.HTTP_401_OK)
+            Response(status=401)
         quantityInstance = get_object_or_404(Quantity, device=deviceId)
         quantitySerializer = QuantitySerializer(quantityInstance)
         
@@ -54,12 +55,17 @@ class Status(APIView):
 class ContactList(generics.ListCreateAPIView):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
+    pagination_class = PageNumberPagination
     
     def get_queryset(self):
         device = authenticate(self);
         if not device:
             return Contact.objects.none
-        return self.queryset.filter(device=device)
+        queryset = self.queryset.filter(device=device)
+        page = self.paginate_queryset(queryset)
+        if page is not None:
+            return page
+        return queryset
     
     def perform_create(self, serializer):
         deviceId = self.request.META.get('HTTP_DEVICE_ID')
@@ -136,7 +142,7 @@ class SmsRequest(APIView):
             else:
                 self.responseData['reply'] = '\n'.join([value for value in self.cmd_list.values()])
                 return Response(self.responseData, status=status.HTTP_404_OK)
-        return Response(self.responseData, status=status.HTTP_400_OK)
+        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
     
     def registerDevice(self, command):
         cmd_args = command.trim().split(' ')
@@ -153,17 +159,17 @@ class SmsRequest(APIView):
                 reply = "Sorry, the phone number %s is already registered to a device. To login send, \n %s" \
                     % (data["phone_number"], self.cmd_list.get("login_device", ""))
                 self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_OK)
+                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
             
             serializer = DeviceSerializer(data=data)
             if serializer.is_valid():
                 instance = Device.objects.get(phone_number=data["phone_number"])
                 self.responseData['reply'] = "device registration successful"
                 self.responseData['data'] = DeviceSerializer(instance).data
-                return Response(self.responseData, status=status.HTTP_201_OK)
+                return Response(self.responseData, status=status.HTTP_201_CREATED)
         reply = "Invalid device registration command.\n" + self.cmd_list.get("register_device", "")
         self.responseData['reply'] = reply
-        return Response(self.responseData, status=status.HTTP_400_OK)
+        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
     
     def loginDevice(self, command):
         cmd_args = command.trim().split(' ')
@@ -183,20 +189,20 @@ class SmsRequest(APIView):
                 reply = "Sorry, the phone number or password incorrect %s. Try login again. \n %s" \
                     % (self.cmd_list.get("login_device", ""))
                 self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_OK)
+                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
             
             self.responseData['reply'] = "device login successful"
             self.responseData['data'] = DeviceSerializer(instance).data
-            return Response(self.responseData, status=status.HTTP_201_OK)
+            return Response(self.responseData, status=status.HTTP_201_CREATED)
         reply = "Invalid device login command.\n" + self.cmd_list.get("login_device", "")
         self.responseData['reply'] = reply
-        return Response(self.responseData, status=status.HTTP_400_OK)
+        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
 
     def addContact(self, command, admin=False):
         cmd_args = command.trim().split(' ')
         deviceInstance = authenticateAndreply(self)
         if not deviceInstance:
-            return Response(self.responseData, status=status.HTTP_401_OK)
+            return Response(self.responseData, status=401)
         
         if len(cmd_args) == 2:
             cmd_args.append(self.responseData["phone_number"])
@@ -207,7 +213,7 @@ class SmsRequest(APIView):
             password = signer.unsign(deviceInstance.password)
             if password != adminPassword:
                 self.responseData['reply'] = "Password incorrect"
-                return Response(self.responseData, status=status.HTTP_400_OK)
+                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
             
         if len(cmd_args) == 3:
             keys = ["first_name", "last_name", "phone_number"]
@@ -226,22 +232,22 @@ class SmsRequest(APIView):
             except Contact.DoesNotExist:
                 reply = "Phone number %s is already registered." % (self.responseData["phone_number"])
                 self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_OK)
+                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
             
             serializer = ContactSerializer(data=data)
             if serializer.is_valid():
                 self.responseData['reply'] = "Registration successful"
-                return Response(self.responseData, status=status.HTTP_201_OK)
+                return Response(self.responseData, status=status.HTTP_201_CREATED)
         reply = "Invalid registration command.\n %s\n%s" \
             % (self.cmd_list.get("add_contact", ""), self.cmd_list.get("admin_add_contact", "")) 
         self.responseData['reply'] = reply
-        return Response(self.responseData, status=status.HTTP_400_OK)
+        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
     
     def getInfo(self):
         # validate device id
         deviceInstance = authenticateAndreply(self)
         if not deviceInstance:
-            return Response(self.responseData, status=status.HTTP_401_OK)
+            return Response(self.responseData, status=401)
         
         try:
             quantityInstance = Quantity.objects.get(device=deviceId)
