@@ -42,7 +42,7 @@ class Status(APIView):
         device = authenticate(self);
         if not device:
             Response(status=401)
-        quantityInstance = get_object_or_404(Quantity, device=deviceId)
+        quantityInstance = get_object_or_404(Quantity, device=device)
         quantitySerializer = QuantitySerializer(quantityInstance)
         
         rateInstance = get_object_or_404(Rate, active_rate=True)
