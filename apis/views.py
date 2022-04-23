@@ -149,7 +149,7 @@ class SmsRequest(APIView):
         if len(cmd_args) == 4:
             keys = ["first_name", "last_name", "phone_number", "password"]
             data = {}
-            for index, value in enumirate(cmd_args):
+            for index, value in enumerate(cmd_args):
                 data.update(keys[index], value)
             data["first_name"] = data["first_name"].title()
             data["last_name"] = data["last_name"].title()
@@ -178,7 +178,7 @@ class SmsRequest(APIView):
             data = {}
             
             # extract phone number and password from list cmd_args into data dict 
-            for index, value in enumirate(cmd_args):
+            for index, value in enumerate(cmd_args):
                 data.update(keys[index], value)
             
             # check if encrypt password and check if password and phone number exists in database
@@ -218,7 +218,7 @@ class SmsRequest(APIView):
         if len(cmd_args) == 3:
             keys = ["first_name", "last_name", "phone_number"]
             data = {}
-            for index, value in enumirate(cmd_args):
+            for index, value in enumerate(cmd_args):
                 data.update(keys[index], value.title())
             data['notification'] = True
             data['device'] = deviceInstance
