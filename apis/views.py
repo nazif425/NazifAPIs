@@ -122,7 +122,7 @@ class SmsRequest(APIView):
     def post(self, request, *args, **kwargs):
         number = self.request.data.get("phone_number", "")
         self.responseData['phone_number'] = number
-        command = self.request.data.get("message", "").lower().trim()
+        command = self.request.data.get("message", "").lower().strip()
         
         if command and number:
             if command.startswith("wdadmin regdevice"):
@@ -145,7 +145,7 @@ class SmsRequest(APIView):
         return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
     
     def registerDevice(self, command):
-        cmd_args = command.trim().split(' ')
+        cmd_args = command.strip().split(' ')
         if len(cmd_args) == 4:
             keys = ["first_name", "last_name", "phone_number", "password"]
             data = {}
@@ -172,7 +172,7 @@ class SmsRequest(APIView):
         return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
     
     def loginDevice(self, command):
-        cmd_args = command.trim().split(' ')
+        cmd_args = command.strip().split(' ')
         if len(cmd_args) == 2:
             keys = ["phone_number", "password"]
             data = {}
@@ -199,7 +199,7 @@ class SmsRequest(APIView):
         return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
 
     def addContact(self, command, admin=False):
-        cmd_args = command.trim().split(' ')
+        cmd_args = command.strip().split(' ')
         deviceInstance = authenticateAndreply(self)
         if not deviceInstance:
             return Response(self.responseData, status=401)
