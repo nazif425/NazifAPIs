@@ -141,7 +141,7 @@ class SmsRequest(APIView):
                 return self.getInfo()
             else:
                 self.responseData['reply'] = '\n'.join([value for value in self.cmd_list.values()])
-                return Response(self.responseData, status=status.HTTP_404_OK)
+                return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
         return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
     
     def registerDevice(self, command):
@@ -252,14 +252,14 @@ class SmsRequest(APIView):
         try:
             quantityInstance = Quantity.objects.get(device=deviceId)
         except Quantity.DoesNotExist:
-            return Response(self.responseData, status=status.HTTP_404_OK)
+            return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
         
         quantity = QuantitySerializer(quantityInstance).data
         
         try:
             rateInstance = Rate.objects.get(active_rate=True)
         except Rate.DoesNotExist:
-            return Response(self.responseData, status=status.HTTP_404_OK)
+            return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
         
         rate = RateSerializer(rateInstance).data
         
