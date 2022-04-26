@@ -120,8 +120,7 @@ AUTH_PASSWORD_VALIDATORS = [
 REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASS': [
         'rest_framework.permissions.DjangoModelPermissionOrAnonReadOnly'
-    ],
-    'PAGE_SIZE': 10
+    ]
 }
 
 
@@ -130,7 +129,7 @@ REST_FRAMEWORK = {
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Etc/GMT-1'
 
 USE_I18N = True
 
