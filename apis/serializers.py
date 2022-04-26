@@ -16,8 +16,7 @@ class DeviceSerializer(serializers.ModelSerializer):
     def validate_phone_number(self, value):
         value = value.strip()
         if value:
-            deviceInstance = Device.objects.get(phone_number=value)
-            if deviceInstance:
+            if Device.objects.filter(phone_number=value).exists():
                 raise serializers.ValidationError('An account with this phone number already exists')
         return value
     

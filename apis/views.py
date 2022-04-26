@@ -4,14 +4,15 @@ from rest_framework import generics, mixins, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from rest_framework.pagination import PageNumberPagination
+from rest_framework.pagination import PageNumberPagination, LimitOffsetPagination
+from .pagination import CustomPagination
 from .serializers import DeviceSerializer, ContactSerializer, QuantitySerializer, RateSerializer, OperationLogSerializer
 from . models import Device, Contact, Quantity, Rate, OperationLog
 import os
 # Create your views here.
 
 def authenticate(self):
-    deviceId = self.request.META.get('HTTP_DEVICE_ID')
+    deviceId = self.request.META.get('HTTP_DEVICE_ID', self.request.GET.get('key'))
     try:
         deviceInstance = Device.objects.get(device_id=deviceId)
     except Device.DoesNotExist:
@@ -20,12 +21,21 @@ def authenticate(self):
     return deviceInstance
 
 def authenticateAndreply(self):
-    obj = authenticateDevice(self);
+    obj = authenticate(self);
     if not obj:
         reply = "Could not authenticate device."
         self.responseData['reply'] += reply
     return obj;
-        
+
+def dataInfo(deviceInstance, quantity, rate):
+    reply = "{} \n".format(deviceInstance.company_name)
+    reply += "Shea nut is currently sold at the rate of {} per {} {}.\n".format(rate.price, rate.quantity, rate.unit)
+    reply += "\nQuantity available: {} {}\n".format(quantity.available_quantity, quantity.unit)
+    reply += "\nPrice: {} {}\n".format(str((quantity.available_quantity / rate.quantity) * rate.price), rate.currency)
+    if deviceInstance.contact_number:
+        reply += "To purchase or make further enquiries, call {}".format(deviceInstance.contact_number)
+    return reply
+
 class Initialize(APIView):
     def get(self, request, format=None):
         return Response({'content': 'welcome to IOT sheanut weighing device API'}, status=status.HTTP_200_OK)
@@ -55,20 +65,41 @@ class Status(APIView):
 class ContactList(generics.ListCreateAPIView):
     queryset = Contact.objects.all()
     serializer_class = ContactSerializer
-    pagination_class = PageNumberPagination
+    pagination_class = LimitOffsetPagination
     
-    def get_queryset(self):
-        device = authenticate(self);
-        if not device:
-            return Contact.objects.none
-        queryset = self.queryset.filter(device=device)
-        page = self.paginate_queryset(queryset)
+    def list(self, request):
+        #page = self.paginate_queryset(queryset)
+        deviceInstance = authenticate(self)
+        if not deviceInstance:
+            return Response(status=401)
+        
+        try:
+            quantity = Quantity.objects.get(device=deviceInstance)
+        except Quantity.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        
+        try:
+            rate = Rate.objects.get(active_rate=True)
+        except Rate.DoesNotExist:
+            return Response(status=status.HTTP_404_NOT_FOUND)
+        
+        data = {}
+        data['reply'] = dataInfo(deviceInstance, quantity, rate)
+        contactList = self.filter_queryset(self.get_queryset()).filter(device=deviceInstance)
+        page = self.paginate_queryset(contactList)
         if page is not None:
-            return page
-        return queryset
+            contacts = self.serializer_class(page, many=True).data
+            data['phone_numbers'] = [contact['phone_number'] for contact in contacts] # get list of phone number from  list of contact dict
+            return self.get_paginated_response(data)
+        data['phone_numbers'] = contactList.values_list('phone_number', flat=True)
+        return Response(data)
+        #return Contact.objects.none
+        #if contactList == Contact.objects.none:
+        #    Response( status=status.HTTP_200_OK), status=status.HTTP_200_OK
+        
     
     def perform_create(self, serializer):
-        deviceId = self.request.META.get('HTTP_DEVICE_ID')
+        deviceId = self.request.META.get('HTTP_DEVICE_ID', self.request.GET.get('key'))
         device = get_object_or_404(Device, device_id=deviceId)
         serializer.save(device=device)
 
@@ -77,7 +108,7 @@ class ContactDetail(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = ContactSerializer
     
     def get_object(self):
-        deviceId = self.request.META.get('HTTP_DEVICE_ID')
+        deviceId = self.request.META.get('HTTP_DEVICE_ID', self.request.GET.get('key'))
         return get_object_or_404(
             self.get_queryset(), 
             device__device_id=deviceId, 
@@ -89,23 +120,25 @@ class QuantityDetail(generics.RetrieveUpdateAPIView):
     serializer_class = QuantitySerializer
     
     def get_object(self):
-        deviceId = self.request.META.get('HTTP_DEVICE_ID')
+        deviceId = self.request.META.get('HTTP_DEVICE_ID', self.request.GET.get('key'))
         return get_object_or_404(
             self.get_queryset(), 
             device__device_id=deviceId
         )
-#generics.CreateAPIView, 
-class Rate(generics.RetrieveAPIView):
+#  
+class RateView(generics.CreateAPIView, generics.RetrieveAPIView):
     queryset = Rate.objects.all()
     serializer_class = RateSerializer
     
     def get_object(self):
-        return get_object_or_404(Rate, active_rate=True)
+        return get_object_or_404(self.queryset, active_rate=True)
     
     def perform_create(self, serializer):
-        rateInstance = self.get_object()
-        rateInstance.active_rate = False
-        rateInstance.save()
+        rateList = Rate.objects.filter(active_rate=True)
+        if rateList.exists():
+            rateInstance = rateList[0]
+            rateInstance.active_rate = False
+            rateInstance.save()
         serializer.save()
 
 class SmsRequest(APIView):
@@ -154,8 +187,8 @@ class SmsRequest(APIView):
             data["first_name"] = data["first_name"].title()
             data["last_name"] = data["last_name"].title()
             #check if phone number already exists
-            instance = Device.objects.get(phone_number=data["phone_number"])
-            if instance:
+            
+            if Device.objects.filter(phone_number=data["phone_number"]).exists():
                 reply = "Sorry, the phone number %s is already registered to a device. To login send, \n %s" \
                     % (data["phone_number"], self.cmd_list.get("login_device", ""))
                 self.responseData['reply'] = reply
@@ -163,6 +196,7 @@ class SmsRequest(APIView):
             
             serializer = DeviceSerializer(data=data)
             if serializer.is_valid():
+                serializer.save()
                 instance = Device.objects.get(phone_number=data["phone_number"])
                 self.responseData['reply'] = "device registration successful"
                 self.responseData['data'] = DeviceSerializer(instance).data
@@ -184,16 +218,16 @@ class SmsRequest(APIView):
             # check if encrypt password and check if password and phone number exists in database
             signer = Signer()
             password = signer.sign(data['password'])
-            instance = Device.objects.get(phone_number=data["phone_number"], password=password)
-            if not instance:
+            deviceList = Device.objects.filter(phone_number=data["phone_number"], password=password)
+            if not deviceList.exists():
                 reply = "Sorry, the phone number or password incorrect %s. Try login again. \n %s" \
                     % (self.cmd_list.get("login_device", ""))
                 self.responseData['reply'] = reply
                 return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
-            
+                
             self.responseData['reply'] = "device login successful"
-            self.responseData['data'] = DeviceSerializer(instance).data
-            return Response(self.responseData, status=status.HTTP_201_CREATED)
+            self.responseData['data'] = DeviceSerializer(deviceList[0]).data
+            return Response(self.responseData, status=status.HTTP_200_OK)
         reply = "Invalid device login command.\n" + self.cmd_list.get("login_device", "")
         self.responseData['reply'] = reply
         return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
@@ -204,9 +238,9 @@ class SmsRequest(APIView):
         if not deviceInstance:
             return Response(self.responseData, status=401)
         
-        if len(cmd_args) == 2:
-            cmd_args.append(self.responseData["phone_number"])
-        elif len(cmd_args) == 4 and admin == True:
+        if len(cmd_args) == 2: # for customer register by customer
+            cmd_args.append('0' + (self.responseData["phone_number"])[4:]) #remove +234
+        elif len(cmd_args) == 4 and admin == True: # for customer register by admin 
             # validate admin password
             adminPassword = cmd_args.pop() # get last element from list which is the password
             signer = Signer()
@@ -221,23 +255,25 @@ class SmsRequest(APIView):
             for index, value in enumerate(cmd_args):
                 data[keys[index]] = value.title()
             data['notification'] = True
-            data['device'] = deviceInstance
+            data['device'] = deviceInstance.pk
             
             #check if phone number already exists
-            try:
-                instance = Contact.objects.get(
-                    phone_number=data['phone_number'],
-                    device=deviceInstance
-                )
-            except Contact.DoesNotExist:
-                reply = "Phone number %s is already registered." % (self.responseData["phone_number"])
+            contactList = Contact.objects.filter(
+                phone_number=data['phone_number'],
+                device=deviceInstance
+            )
+            if contactList.exists():
+                reply = "Phone number %s is already registered." % (data['phone_number'])
                 self.responseData['reply'] = reply
                 return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
             
             serializer = ContactSerializer(data=data)
             if serializer.is_valid():
+                
+                serializer.save()
                 self.responseData['reply'] = "Registration successful"
                 return Response(self.responseData, status=status.HTTP_201_CREATED)
+            print(serializer.errors)
         reply = "Invalid registration command.\n %s\n%s" \
             % (self.cmd_list.get("add_contact", ""), self.cmd_list.get("admin_add_contact", "")) 
         self.responseData['reply'] = reply
@@ -250,25 +286,17 @@ class SmsRequest(APIView):
             return Response(self.responseData, status=401)
         
         try:
-            quantityInstance = Quantity.objects.get(device=deviceId)
+            quantity = Quantity.objects.get(device= deviceInstance)
         except Quantity.DoesNotExist:
             return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
         
-        quantity = QuantitySerializer(quantityInstance).data
         
         try:
-            rateInstance = Rate.objects.get(active_rate=True)
+            rate = Rate.objects.get(active_rate=True)
         except Rate.DoesNotExist:
             return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
         
-        rate = RateSerializer(rateInstance).data
-        
-        reply = "%s\n" % (deviceInstance.company_name)
-        reply += "Shea nut is currently sold at the rate of %s per %s %s.\n" % (rate.price, rate.quantity, rate.unit)
-        reply += "\nQuantity available: %s %s\n" % (quantity.available_quantity, quantity.unit)
-        reply += "\nPrice: %s %s\n" % (str((quantity.available_quantity / rate.quantity) * rate.price), rate.currency)
-        reply += "To purchase or make further enquiries, call %s" % (deviceInstance.contact_number)
-        self.responseData['reply'] = reply
+        self.responseData['reply'] = dataInfo(deviceInstance, quantity, rate)
         
         return Response(self.responseData, status=status.HTTP_200_OK)
     
