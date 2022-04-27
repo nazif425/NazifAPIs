@@ -118,12 +118,12 @@ AUTH_PASSWORD_VALIDATORS = [
 ]
 
 REST_FRAMEWORK = {
-    'DEFAULT_PERMISSION_CLASS': [
-        'rest_framework.permissions.DjangoModelPermissionOrAnonReadOnly'
-    ]
+    
 }
 
-
+#'DEFAULT_PERMISSION_CLASS': [
+#        'rest_framework.permissions.DjangoModelPermissionOrAnonReadOnly'
+#    ]
 # Internationalization
 # https://docs.djangoproject.com/en/3.2/topics/i18n/
 
