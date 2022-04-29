@@ -46,7 +46,7 @@ class DeviceDetail(generics.RetrieveUpdateAPIView):
     def get_object(self):
         return authenticate(self);
 
-class Status(APIView):
+class StatusView(APIView):
     def get(self, request, version="v1", format=None):
         device = authenticate(self);
         if not device:
@@ -114,16 +114,28 @@ class ContactDetail(generics.RetrieveUpdateDestroyAPIView):
             phone_number=self.kwargs['phoneNumber']
         )
 
-class QuantityDetail(generics.RetrieveUpdateAPIView):
+class QuantityView(APIView):
     queryset = Quantity.objects.all()
     serializer_class = QuantitySerializer
     
     def get_object(self):
         deviceId = self.request.META.get('HTTP_DEVICE_ID', self.request.GET.get('key'))
         return get_object_or_404(
-            self.get_queryset(), 
+            self.queryset, 
             device__device_id=deviceId
         )
+    
+    def get(self, request):
+        serializer = self.serializer_class(self.get_object())
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+    def post(self, request):
+        updateSerializer = self.serializer_class(self.get_object(), data=request.data)
+        if updateSerializer.is_valid(): 
+            updateSerializer.save()
+            return Response(updateSerializer.data, status=status.HTTP_200_OK)
+        return Response(updateSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
 #  
 class RateView(generics.CreateAPIView, generics.RetrieveAPIView):
     queryset = Rate.objects.all()
