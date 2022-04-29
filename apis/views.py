@@ -85,6 +85,8 @@ class ContactList(generics.ListCreateAPIView):
         data = {}
         data['reply'] = dataInfo(deviceInstance, quantity, rate)
         contactList = self.filter_queryset(self.get_queryset()).filter(device=deviceInstance)
+        if contactList.count() == 0:
+            return Response(status=status.HTTP_404_NOT_FOUND)
         page = self.paginate_queryset(contactList)
         if page is not None:
             contacts = self.serializer_class(page, many=True).data
