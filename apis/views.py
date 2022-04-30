@@ -23,7 +23,7 @@ def authenticateAndreply(self):
     obj = authenticate(self);
     if not obj:
         reply = "Could not authenticate device."
-        self.responseData['reply'] += reply
+        self.responseData['reply'] = reply
     return obj;
 
 def dataInfo(deviceInstance, quantity, rate):
