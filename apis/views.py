@@ -132,7 +132,9 @@ class QuantityView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        updateSerializer = self.serializer_class(self.get_object(), data=request.data)
+        data = request.data
+        data["available_quantity"] = round(data.get("available_quantity", 0.00), 2)
+        updateSerializer = self.serializer_class(self.get_object(), data=data)
         if updateSerializer.is_valid(): 
             updateSerializer.save()
             return Response(updateSerializer.data, status=status.HTTP_200_OK)
