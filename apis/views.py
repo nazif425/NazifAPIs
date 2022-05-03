@@ -6,7 +6,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination, LimitOffsetPagination
 from .serializers import DeviceSerializer, ContactSerializer, QuantitySerializer, RateSerializer, OperationLogSerializer
-from . models import Device, Contact, Quantity, Rate, OperationLog
+from . models import Device, Contact, Quantity, Rate, OperationLog, UNITS
 import os
 # Create your views here.
 
@@ -132,13 +132,24 @@ class QuantityView(APIView):
         return Response(serializer.data, status=status.HTTP_200_OK)
 
     def post(self, request):
-        data = request.data
-        data["available_quantity"] = round(data.get("available_quantity", 0.00), 2)
-        updateSerializer = self.serializer_class(self.get_object(), data=data)
+        instance = self.get_object()
+        data = {
+            "available_quantity": request.data.get("available_quantity", 0.00),
+            "unit": request.data.get("unit", UNITS[0][0])
+        }
+        newData = float(data["available_quantity"]) + float(instance.available_quantity)
+        data["available_quantity"] = str(round(newData, 2))
+        updateSerializer = self.serializer_class(instance, data=data)
         if updateSerializer.is_valid(): 
             updateSerializer.save()
             return Response(updateSerializer.data, status=status.HTTP_200_OK)
         return Response(updateSerializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    def delete(self, request):
+        instance = self.get_object()
+        instance.available_quantity = 0.00
+        instance.save()
+        return Response(status=204)
 
 #  
 class RateView(generics.CreateAPIView, generics.RetrieveAPIView):
