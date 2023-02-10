@@ -42,15 +42,40 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+
     'rest_framework',
     'rest_framework.authtoken',
-    'rest_auth',
+    #'rest_auth',
     'django.contrib.sites',
-    'allauth',
-    'allauth.account',
-    'rest_auth.registration',
+    #'allauth',
+    #'allauth.account',
+    #'rest_auth.registration',
+    
+    'wagtail.contrib.forms',
+    'wagtail.contrib.redirects',
+    'wagtail.embeds',
+    'wagtail.sites',
+    'wagtail.users',
+    'wagtail.snippets',
+    'wagtail.documents',
+    'wagtail.images',
+    'wagtail.search',
+    'wagtail.admin',
+    'wagtail',
+
+    'modelcluster',
+    'taggit',
+    
+    'salesman.core',
+    'salesman.basket',
+    'salesman.checkout',
+    'salesman.orders',
+    'salesman.admin',
+    
     'apis.apps.ApisConfig',
-    'users.apps.UsersConfig'
+    'users.apps.UsersConfig',
+    'frontend.apps.FrontendConfig',
+    'shop.apps.ShopConfig'
 ]
 
 MIDDLEWARE = [
@@ -61,6 +86,7 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'wagtail.contrib.redirects.middleware.RedirectMiddleware',
 ]
 
 ROOT_URLCONF = 'NazifAPIs.urls'
@@ -68,7 +94,9 @@ ROOT_URLCONF = 'NazifAPIs.urls'
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [],
+        'DIRS': [
+            os.path.join(BASE_DIR, 'templates'),
+        ],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -158,3 +186,12 @@ STATIC_URL = env("STATIC_URL", default='/static/')
 AUTH_USER_MODEL = 'users.User'
 
 SITE_ID = 1
+
+WAGTAIL_SITE_NAME = 'My Example Site'
+
+SALESMAN_BASKET_MODEL = 'shop.Basket'
+SALESMAN_BASKET_ITEM_MODEL = 'shop.BasketItem'
+SALESMAN_ORDER_MODEL = 'shop.Order'
+SALESMAN_ORDER_ITEM_MODEL = 'shop.OrderItem'
+SALESMAN_ORDER_PAYMENT_MODEL = 'shop.OrderPayment'
+SALESMAN_ORDER_NOTE_MODEL = 'shop.OrderNote'

@@ -66,7 +66,7 @@ class Contact(models.Model):
 class Quantity(models.Model):
     device = models.ForeignKey(Device, on_delete=models.CASCADE)
     available_quantity = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
-    unit = models.CharField(max_length=24, choices=UNITS, default=UNITS[0][0])
+    unit = models.CharField(max_length=10, choices=UNITS, default=UNITS[0][0])
     last_modified = models.DateTimeField(auto_now=True)
     
     def __str__(self):

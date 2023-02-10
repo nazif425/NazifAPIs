@@ -91,8 +91,10 @@ class ContactList(generics.ListCreateAPIView):
         if page is not None:
             contacts = self.serializer_class(page, many=True).data
             data['phone_numbers'] = [contact['phone_number'] for contact in contacts] # get list of phone number from  list of contact dict
+            data['total_results'] = len(data['phone_numbers'])
             return self.get_paginated_response(data)
         data['phone_numbers'] = contactList.values_list('phone_number', flat=True)
+        data['total_results'] = len(data['phone_numbers'])
         return Response(data)
         #return Contact.objects.none
         #if contactList == Contact.objects.none:
@@ -205,6 +207,13 @@ class SmsRequest(APIView):
     
     def registerDevice(self, command):
         cmd_args = command.strip().split(' ')
+
+        deviceInstance = authenticate(self)
+        if deviceInstance:
+            reply = "Device already registered."
+            self.responseData['reply'] = reply
+            return Response(self.responseData, status=400)
+
         if len(cmd_args) == 4:
             keys = ["first_name", "last_name", "phone_number", "password"]
             data = {}
@@ -226,6 +235,7 @@ class SmsRequest(APIView):
                 instance = Device.objects.get(phone_number=data["phone_number"])
                 self.responseData['reply'] = "device registration successful"
                 self.responseData['data'] = DeviceSerializer(instance).data
+                self.responseData['registration_success'] = True
                 return Response(self.responseData, status=status.HTTP_201_CREATED)
         reply = "Invalid device registration command.\n" + self.cmd_list.get("register_device", "")
         self.responseData['reply'] = reply
@@ -233,6 +243,13 @@ class SmsRequest(APIView):
     
     def loginDevice(self, command):
         cmd_args = command.strip().split(' ')
+        
+        deviceInstance = authenticate(self)
+        if deviceInstance:
+            reply = "Device already logged in."
+            self.responseData['reply'] = reply
+            return Response(self.responseData, status=400)
+
         if len(cmd_args) == 2:
             keys = ["phone_number", "password"]
             data = {}
@@ -253,6 +270,7 @@ class SmsRequest(APIView):
                 
             self.responseData['reply'] = "device login successful"
             self.responseData['data'] = DeviceSerializer(deviceList[0]).data
+            self.responseData['login_success'] = True
             return Response(self.responseData, status=status.HTTP_200_OK)
         reply = "Invalid device login command.\n" + self.cmd_list.get("login_device", "")
         self.responseData['reply'] = reply
