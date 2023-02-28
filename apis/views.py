@@ -263,7 +263,7 @@ class SmsRequest(APIView):
             password = signer.sign(data['password'])
             deviceList = Device.objects.filter(phone_number=data["phone_number"], password=password)
             if not deviceList.exists():
-                reply = "Sorry, the phone number or password incorrect %s. Try login again. \n %s" \
+                reply = "Sorry, the phone number or password incorrect. Try login again. \n %s" \
                     % (self.cmd_list.get("login_device", ""))
                 self.responseData['reply'] = reply
                 return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
