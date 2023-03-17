@@ -96,6 +96,7 @@ TEMPLATES = [
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
         'DIRS': [
             os.path.join(BASE_DIR, 'templates'),
+            os.path.join(BASE_DIR, os.path.join('templates', 'market')),
         ],
         'APP_DIRS': True,
         'OPTIONS': {
@@ -182,6 +183,10 @@ MEDIA_ROOT = env("MEDIA_ROOT", default=os.path.join(BASE_DIR, 'media'))
 MEDIA_URL = env("MEDIA_URL", default='/media/')
 STATIC_ROOT = env("STATIC_ROOT", default=os.path.join(BASE_DIR, 'static'))
 STATIC_URL = env("STATIC_URL", default='/static/')
+
+STATICFILES_DIRS = [
+    os.path.join(BASE_DIR, os.path.join('static', 'market')),
+]
 
 AUTH_USER_MODEL = 'users.User'
 

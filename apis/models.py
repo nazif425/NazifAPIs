@@ -24,6 +24,12 @@ CURRENCIES = (
     ("DOLLAR","Dollar")
 )
 
+ORDER_STATUS = (
+    ("PENDING", "Pending"),
+    ("SOLD","Sold"),
+    ("CANCELED", "Canceled")
+)
+
 # Create your models here.
 
 class Device(models.Model):
@@ -37,6 +43,7 @@ class Device(models.Model):
     company_name = models.CharField(max_length=255, blank=True)
     email = models.EmailField(blank=True)
     address = models.CharField(max_length=255, blank=True)
+    country = models.CharField(max_length=255, blank=True)
     description = models.TextField(blank=True)
     date_created = models.DateTimeField(auto_now_add=True)
     
@@ -62,6 +69,8 @@ class Contact(models.Model):
     
     def __str__(self):
         return '%s %s %s' % (self.id, self.first_name, self.last_name)
+    def fullname(self):
+        return '%s %s' % (self.first_name, self.last_name)
 
 class Quantity(models.Model):
     device = models.ForeignKey(Device, on_delete=models.CASCADE)
@@ -82,3 +91,15 @@ class Rate(models.Model):
     
     def __str__(self):
         return '%s / %s%s' % (self.quantity, self.price, self.unit)
+
+class Order(models.Model):
+    seller = models.ForeignKey(Device, on_delete=models.CASCADE)
+    contact = models.ForeignKey(Contact, on_delete=models.CASCADE)
+    address = models.CharField(max_length=255, blank=True)
+    quantity = models.DecimalField(max_digits=9, decimal_places=2, default=0.00)
+    status = models.CharField(max_length=10, choices=ORDER_STATUS, default=ORDER_STATUS[0][0])
+    created = models.DateTimeField(auto_now_add=True)
+    last_modified = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return '%s: %s %s %s' % (self.contact.id, self.contact.firstname, self.quantity, self.status)
