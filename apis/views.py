@@ -1,4 +1,5 @@
 from django.core.signing import Signer
+from django.http import JsonResponse
 from django.shortcuts import render, get_object_or_404
 from rest_framework import generics, mixins, status
 from rest_framework.views import APIView
@@ -6,9 +7,116 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.pagination import PageNumberPagination, LimitOffsetPagination
 from .serializers import DeviceSerializer, ContactSerializer, QuantitySerializer, RateSerializer, OperationLogSerializer, OrderSerializer
-from . models import Device, Contact, Quantity, Rate, OperationLog, Order, ORDER_STATUS, UNITS
-import os
-# Create your views here.
+from . models import Device, Contact, Quantity, Rate, OperationLog, Order, ORDER_STATUS, UNITS, Verify
+from pathlib import Path
+import os, environ, random
+import africastalking
+
+
+# Build paths inside the project like this: BASE_DIR / 'subdir'.
+BASE_DIR = Path(__file__).resolve().parent.parent
+
+env = environ.Env()
+# reading .env file
+environ.Env.read_env(os.path.join(BASE_DIR, '.env'))
+
+# Configure africatalking API access
+AFTK_USERNAME = env("AFTK_USERNAME", default="")
+AFTK_API_KEY = env("AFTK_API_KEY", default="")
+
+africastalking.initialize(AFTK_USERNAME, AFTK_API_KEY )
+sms = africastalking.SMS
+
+#
+def get_link_code(request, *args, **kwargs):
+    link_code = ''
+    for i in range(0,6):
+        n = random.randint(0,9)
+        link_code = link_code + str(n)
+    
+    return JsonResponse({
+        "link_code": link_code
+    }, status=status.HTTP_200_OK)
+
+#
+def login_status(request, link_code):
+    #data = json.loads(request.body)
+    
+    verifyList = Verify.objects.filter(link_code=link_code)
+    if verifyList.exists():
+        verifyInstance = verifyList[0]
+        
+        reply = "Device login successful"
+        phone_number = verifyInstance.device.phone_number
+        try:
+            print(reply)
+            response = sms.send(reply, [phone_number])
+            print(response)
+        except Exception as e:
+            print(f'An error occured while sending sms: {e}')
+        
+        return JsonResponse({
+            'device_id': verifyInstance.device.device_id,
+            'login': True,
+        }, status=status.HTTP_200_OK)
+
+    return JsonResponse({
+        'login': False,
+    }, status=status.HTTP_200_OK)
+
+def update_contacts(request):
+    deviceId = request.META.get('HTTP_DEVICE_ID', request.GET.get('key'))
+    print(deviceId)
+    phone_number = []
+    try:
+        deviceInstance = Device.objects.get(device_id=deviceId)
+    except Device.DoesNotExist:
+        return JsonResponse({"reply": "Device unauthorized"}, status=401)
+    
+    reply = ''
+    try:
+        rate = Rate.objects.get(active_rate=True)
+        reply = "Shea nut selling rate: {} per {} {}.\n".format(rate.price, rate.quantity, rate.unit)
+    except Rate.DoesNotExist:
+        print('failed to get rate instance')
+        #return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
+    #reply = dataInfo(deviceInstance, quantity, rate)
+    
+    if deviceInstance.company_name:
+        reply += "{} \n".format(deviceInstance.company_name)
+    else:
+        reply += "{} {} \n".format(deviceInstance.first_name, deviceInstance.last_name)
+        
+    quantityList = Quantity.objects.filter(device=deviceInstance)
+    if quantityList.exists():
+        quantity = quantityList[0]
+        reply += "Quantity available: {} {}\n".format(quantity.available_quantity, quantity.unit)
+        #reply += "Price: {} {}\n".format(str(round((quantity.available_quantity / rate.quantity) * rate.price, 2)), rate.currency)
+    reply += "Contact No.: {}\n\n".format(deviceInstance.phone_number)
+    # reply += "\nTo make an order, reply with the following: wd makeorder <the_quantity>".format(deviceInstance.phone_number)
+    
+    # get and send sms to contacts
+    success_counter = 0
+    contactList = Contact.objects.all()
+    if contactList.exists():
+        for contact in contactList:
+            phone_number.append(contact.phone_number)
+    try:
+        print(reply)
+        response = sms.send(reply, phone_number)
+        print(response)
+        
+        if response:
+            for recipient in response.Recipients:
+                if recipient.status == 'Success' and recipient.statusCode == 101:
+                    success_counter += 1
+    except Exception as e:
+        print(f'An error occured while sending sms: {e}')
+    
+    return JsonResponse({
+        "total_sent": success_counter,
+        "total_contacts": len(phone_number),
+    }, status=status.HTTP_200_OK)
 
 def authenticate(self):
     deviceId = self.request.META.get('HTTP_DEVICE_ID', self.request.GET.get('key'))
@@ -20,28 +128,23 @@ def authenticate(self):
     return deviceInstance
 
 def authenticateAndreply(self):
-    obj = authenticate(self);
+    obj = authenticate(self)
     if not obj:
         reply = "Could not authenticate device."
         self.responseData['reply'] = reply
-    return obj;
+    return obj
 
 def is_authenticated(request, *args, **kwargs):
-    deviceInstance = authenticate(self)
-    if deviceInstance:
-        return Response({'authenticated': True}, status=status.HTTP_200_OK)
-    return Response({'authenticated': False}, status=status.HTTP_200_OK)
+    deviceId = request.META.get('HTTP_DEVICE_ID', request.GET.get('key'))
+    try:
+        deviceInstance = Device.objects.get(device_id=deviceId)
+    except Device.DoesNotExist:
+        return JsonResponse({'authenticated': False}, status=status.HTTP_200_OK)
+    return JsonResponse({'authenticated': True}, status=status.HTTP_200_OK)
+    
 
 def dataInfo(deviceInstance, quantity, rate):
-    reply = ""
-    if deviceInstance.company_name:
-        reply += "{} \n".format(deviceInstance.company_name)
-    reply += "Shea nut is currently sold at the rate of {} per {} {}.\n".format(rate.price, rate.quantity, rate.unit)
-    reply += "\nQuantity available: {} {}\n".format(quantity.available_quantity, quantity.unit)
-    reply += "\nPrice: {} {}\n".format(str(round((quantity.available_quantity / rate.quantity) * rate.price, 2)), rate.currency)
-    reply += "\nTo make an order, reply with the following: wd makeorder <the_quantity>".format(deviceInstance.phone_number)
-    reply += "For further enquiries, call {}".format(deviceInstance.phone_number)
-    return reply
+    pass
 
 class Initialize(APIView):
     def get(self, request, format=None):
@@ -52,11 +155,11 @@ class DeviceDetail(generics.RetrieveUpdateAPIView):
     serializer_class = DeviceSerializer
     
     def get_object(self):
-        return authenticate(self);
+        return authenticate(self)
 
 class StatusView(APIView):
     def get(self, request, version="v1", format=None):
-        device = authenticate(self);
+        device = authenticate(self)
         if not device:
             Response(status=401)
         quantityInstance = get_object_or_404(Quantity, device=device)
@@ -79,12 +182,12 @@ class ContactList(generics.ListCreateAPIView):
         deviceInstance = authenticate(self)
         if not deviceInstance:
             return Response(status=401)
-        
+        """
         try:
             quantity = Quantity.objects.get(device=deviceInstance)
         except Quantity.DoesNotExist:
             return Response(status=status.HTTP_404_NOT_FOUND)
-        
+        """
         try:
             rate = Rate.objects.get(active_rate=True)
         except Rate.DoesNotExist:
@@ -92,9 +195,9 @@ class ContactList(generics.ListCreateAPIView):
         
         data = {}
         data['reply'] = dataInfo(deviceInstance, quantity, rate)
-        contactList = self.filter_queryset(self.get_queryset()).filter(device=deviceInstance)
+        contactList = self.filter_queryset(self.get_queryset()) #.filter(device=deviceInstance)
         if contactList.count() == 0:
-            return Response({"detail": "contact list empty"}, status=status.HTTP_404_NOT_FOUND)
+            return Response({"detail": "Contact list empty"}, status=status.HTTP_404_NOT_FOUND)
         page = self.paginate_queryset(contactList)
         if page is not None:
             contacts = self.serializer_class(page, many=True).data
@@ -178,9 +281,13 @@ class RateView(generics.CreateAPIView, generics.RetrieveAPIView):
         serializer.save()
 
 class SmsRequest(APIView):
+    sms = africastalking.SMS
+    phone_number = []
+    
     cmd_list = {
+        'info': 'wd info',
         'register_device': 'wd regdevice <firstname> <lastname> <password>',
-        'login_device': 'wd logindevice <phone number> <password>',
+        'login_device': 'wd logindevice <link code> <password>',
         'add_contact': 'wd register <firstname> <lastname>',
         'admin_add_contact': 'wd register <firstname> <lastname> <phone number>',
         'order_list': 'wd order',
@@ -193,186 +300,249 @@ class SmsRequest(APIView):
     }
     
     def post(self, request, *args, **kwargs):
-        number = self.request.data.get("phone_number", "")
-        self.responseData['phone_number'] = number
-        command = self.request.data.get("message", "").lower().strip()
+        self.phone_number = [self.request.data.get("from", "")]
+        command = self.request.data.get("text", "").lower().strip()
         
-        if command and number:
-            if command.startswith("wd regdevice"):
-                command = command.replace("wd regdevice", "")
+        if command and self.phone_number:
+            if command.startswith("regdevice"):
+                command = command.replace("regdevice", "")
                 return self.registerDevice(command)
-            elif command.startswith("wd logindevice"):
-                command = command.replace("wd logindevice", "")
+            elif command.startswith("logindevice"):
+                command = command.replace("logindevice", "")
                 return self.loginDevice(command)
-            elif command.startswith("wd register"):
-                command = command.replace("wd register", "")
+            elif command.startswith("register"):
+                command = command.replace("register", "")
                 return self.addContact(command)
-            elif command.startswith("wd info"):
+            elif command.startswith("info"):
                 return self.getInfo()
-            elif command.startswith("wd order"):
+            elif command.startswith("order"):
                 return self.getOrders()
-            elif command.startswith("wd confirmorder"):
-                command = command.replace("wd confirmorder", "")
+            elif command.startswith("confirmorder"):
+                command = command.replace("confirmorder", "")
                 return self.updateOrderStatus(action=confirm)
-            elif command.startswith("wd cancelorder"):
-                command = command.replace("wd cancelorder", "")
+            elif command.startswith("cancelorder"):
+                command = command.replace("cancelorder", "")
                 return self.updateOrderStatus(action=cancel)
-            elif command.startswith("wd makeorder"):
-                command = command.replace("wd makeorder", "")
+            elif command.startswith("makeorder"):
+                command = command.replace("makeorder", "")
                 return self.makeOrder()
             else:
-                self.responseData['reply'] = '\n'.join([value for value in self.cmd_list.values()])
-                return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
-        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
+                guide = '\n'.join([value for value in self.cmd_list.values()])
+                try:
+                    response = self.sms.send(guide, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+        return Response(status=status.HTTP_200_OK)
     
     def registerDevice(self, command):
         cmd_args = command.strip().split(' ')
 
-        deviceInstance = authenticate(self)
-        if deviceInstance:
-            reply = "Device already registered."
-            self.responseData['reply'] = reply
-            return Response(self.responseData, status=400)
-
         if len(cmd_args) == 3:
-            keys = ["first_name", "last_name", "password"]
-            data = {}
-            for index, value in enumerate(cmd_args):
-                data[keys[index]] = value
-             
-            data["first_name"] = data["first_name"].title()
-            data["last_name"] = data["last_name"].title()
-            data["phone_number"] = self.responseData['phone_number']
-            signer = Signer()
-            data['password'] = signer.sign(data['password'])
+            data = {
+                "first_name": cmd_args[0].title(), 
+                "last_name": cmd_args[1].title(), 
+                "password": cmd_args[2],
+                "phone_number": self.phone_number[0]
+            }
 
             #check if phone number already exists
             if Device.objects.filter(phone_number=data["phone_number"]).exists():
                 reply = "Sorry, the phone number %s is already registered to a device. To login send, \n %s" \
                     % (data["phone_number"], self.cmd_list.get("login_device", ""))
-                self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
             
             serializer = DeviceSerializer(data=data)
             if serializer.is_valid():
                 serializer.save()
-                instance = Device.objects.get(phone_number=data["phone_number"])
-                self.responseData['reply'] = "device registration successful"
-                self.responseData['data'] = DeviceSerializer(instance).data
-                self.responseData['registration_success'] = True
-                return Response(self.responseData, status=status.HTTP_201_CREATED)
-        reply = "Invalid device registration command.\n" + self.cmd_list.get("register_device", "")
-        self.responseData['reply'] = reply
-        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
+                reply = "Device registration successful"
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
+                
+        reply = "Invalid registration command.\n" + self.cmd_list.get("register_device", "")
+        try:
+            print(reply)
+            response = self.sms.send(reply, self.phone_number)
+            print(response)
+        except Exception as e:
+            print(f'An error occured while sending sms: {e}')
+        return Response(status=status.HTTP_200_OK)
     
     def loginDevice(self, command):
         cmd_args = command.strip().split(' ')
-        
-        deviceInstance = authenticate(self)
-        if deviceInstance:
-            reply = "Device already logged in."
-            self.responseData['reply'] = reply
-            return Response(self.responseData, status=400)
 
         if len(cmd_args) == 2:
-            keys = ["phone_number", "password"]
-            data = {}
-            
-            # extract phone number and password from list cmd_args into data dict 
-            for index, value in enumerate(cmd_args):
-                data[keys[index]] = value
-            
-            # check if encrypt password and check if password and phone number exists in database
-            signer = Signer()
-            password = signer.sign(data['password'])
-            deviceList = Device.objects.filter(phone_number=data["phone_number"], password=password)
-            if not deviceList.exists():
-                reply = "Sorry, the phone number or password incorrect. Try login again. \n %s" \
-                    % (self.cmd_list.get("login_device", ""))
-                self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
-            
-            self.responseData['reply'] = "device login successful"
-            self.responseData['data'] = DeviceSerializer(deviceList[0]).data
-            self.responseData['login_success'] = True
-            return Response(self.responseData, status=status.HTTP_200_OK)
-        reply = "Invalid device login command.\n" + self.cmd_list.get("login_device", "")
-        self.responseData['reply'] = reply
-        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
+            cmd_args = self.phone_number + cmd_args
+        
+        if len(cmd_args) == 3:
+            data = {
+                "phone_number": cmd_args[0],
+                "link_code": cmd_args[1],
+                "password": cmd_args[2]
+            }
 
+            print(data)
+            deviceList = Device.objects.filter(phone_number=data["phone_number"])
+            
+            if not deviceList.exists():
+                reply = "Sorry, the phone number is incorrect or not registered. Check and try again. \n %s" \
+                    % (self.cmd_list.get("login_device", ""))
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, data["phone_number"])
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
+            
+            deviceInstance = deviceList[0]
+            signer = Signer()
+            if signer.unsign(deviceInstance.password) != data['password']:
+                reply = "Sorry, password is incorrect. Check and try again. \n %s" \
+                    % (self.cmd_list.get("login_device", ""))
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
+            verifyInstance = Verify.objects.create(device=deviceInstance, link_code=data['link_code'])
+            verifyInstance.save()
+            print("Verify code on Device to complete login")
+            return Response(status=status.HTTP_200_OK)
+        
+        # Invalid command
+        reply = "Invalid login command.\n" + self.cmd_list.get("login_device", "")
+        try:
+            print(reply)
+            response = self.sms.send(reply, self.phone_number)
+            print(response)
+        except Exception as e:
+            print(f'An error occured while sending sms: {e}')
+        return Response(status=status.HTTP_200_OK)
+    
     def addContact(self, command, admin=False):
         cmd_args = command.strip().split(' ')
-        deviceInstance = authenticateAndreply(self)
-        if not deviceInstance:
-            return Response(self.responseData, status=401)
+        admin = True
         
-        if len(cmd_args) == 2: # for customer register by customer
-            cmd_args.append(self.responseData["phone_number"])
-            #cmd_args.append('0' + (self.responseData["phone_number"])[4:]) #remove +234
-        elif len(cmd_args) == 3: # for customer register by admin 
-            #verify if performed by admin
-            if deviceInstance.phone_number != self.responseData["phone_number"]:
+        # for registration by customer
+        if len(cmd_args) == 2:
+            admin = False
+            cmd_args.append(self.phone_number[0])
+            # cmd_args.append('0' + (self.responseData["phone_number"])[4:]) #remove +234
+        
+        # for customer registration by admin
+        if admin == True:
+            # Verify if performed by admin
+            deviceList = Device.objects.filter(phone_number=self.phone_number[0])
+            if not deviceList.exists():
                 reply = "Sorry, the phone No. %s does not have the permission perform" \
                     "the given operation. Try again with an adminstrative number." \
-                    % (self.responseData["phone_number"])
-                self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
-            
+                    % (self.phone_number[0])
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
+        
         if len(cmd_args) == 3:
-            keys = ["first_name", "last_name", "phone_number"]
-            data = {}
-            for index, value in enumerate(cmd_args):
-                data[keys[index]] = value.title()
-            data['notification'] = True
-            data['device'] = deviceInstance.pk
+            data = {
+                "first_name": cmd_args[0].title(),
+                "last_name": cmd_args[1].title(),
+                "phone_number": cmd_args[2]
+            }
             
             #check if phone number already exists
             contactList = Contact.objects.filter(
-                phone_number=data['phone_number'],
-                device=deviceInstance
+                phone_number=data['phone_number']
             )
             if contactList.exists():
                 reply = "Phone number %s is already registered." % (data['phone_number'])
-                self.responseData['reply'] = reply
-                return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
             
+            # Create new contact
             serializer = ContactSerializer(data=data)
             if serializer.is_valid():
-                
                 serializer.save()
-                self.responseData['reply'] = "Registration successful"
-                return Response(self.responseData, status=status.HTTP_201_CREATED)
-            print(serializer.errors)
+                reply = "Registration successful"
+                try:
+                    print(reply)
+                    response = self.sms.send(reply, self.phone_number)
+                    print(response)
+                except Exception as e:
+                    print(f'An error occured while sending sms: {e}')
+                return Response(status=status.HTTP_200_OK)
+        
+        # Invalid command
         reply = "Invalid registration command.\n %s\n%s" \
-            % (self.cmd_list.get("add_contact", ""), self.cmd_list.get("admin_add_contact", "")) 
-        self.responseData['reply'] = reply
-        return Response(self.responseData, status=status.HTTP_400_BAD_REQUEST)
+            % (self.cmd_list.get("add_contact", ""), self.cmd_list.get("add_contact", ""))
+        try:
+            print(reply)
+            response = self.sms.send(reply, self.phone_number)
+            print(response)
+        except Exception as e:
+            print(f'An error occured while sending sms: {e}')
+        return Response(status=status.HTTP_200_OK)
     
     def getInfo(self):
-        # validate device id
-        deviceInstance = authenticateAndreply(self)
-        if not deviceInstance:
-            return Response(self.responseData, status=401)
-        
-        try:
-            quantity = Quantity.objects.get(device= deviceInstance)
-        except Quantity.DoesNotExist:
-            return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
-        
-        
+        reply = ''
         try:
             rate = Rate.objects.get(active_rate=True)
+            reply = "Shea nut selling rate: {} per {} {}.\n".format(rate.price, rate.quantity, rate.unit)
         except Rate.DoesNotExist:
-            return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
+            print('failed to get rate instance')
+            #return Response(self.responseData, status=status.HTTP_404_NOT_FOUND)
+        #reply = dataInfo(deviceInstance, quantity, rate)
         
-        self.responseData['reply'] = dataInfo(deviceInstance, quantity, rate)
+        deviceList = Device.objects.all()
         
-        return Response(self.responseData, status=status.HTTP_200_OK)
+        for deviceInstance in deviceList:
+            
+            if deviceInstance.company_name:
+                reply += "{} \n".format(deviceInstance.company_name)
+            else:
+                reply += "{} {} \n".format(deviceInstance.first_name, deviceInstance.last_name)
+            
+            quantityList = Quantity.objects.filter(device=deviceInstance)
+            if quantityList.exists():
+                quantity = quantityList[0]
+                reply += "Quantity available: {} {}\n".format(quantity.available_quantity, quantity.unit)
+                #reply += "Price: {} {}\n".format(str(round((quantity.available_quantity / rate.quantity) * rate.price, 2)), rate.currency)
+            reply += "Contact No.: {}\n\n".format(deviceInstance.phone_number)
+            # reply += "\nTo make an order, reply with the following: wd makeorder <the_quantity>".format(deviceInstance.phone_number)
+        try:
+            print(reply)
+            response = self.sms.send(reply, self.phone_number)
+            print(response)
+        except Exception as e:
+            print(f'An error occured while sending sms: {e}')
+        return Response(status=status.HTTP_200_OK)
     
     def getOrders(self):
         deviceInstance = authenticateAndreply(self)
         if not deviceInstance:
             return Response(self.responseData, status=401)
+        
         # verify admin
         if deviceInstance.phone_number != self.responseData["phone_number"]:
             reply = "Sorry, the phone No. %s does not have the permission perform" \

@@ -1,6 +1,6 @@
 from django.urls import include, path
 from rest_framework.urlpatterns import format_suffix_patterns
-from .views import Initialize, DeviceDetail, ContactList, ContactDetail, QuantityView, RateView, StatusView, SmsRequest, Login, is_authenticated
+from .views import Initialize, DeviceDetail, ContactList, ContactDetail, QuantityView, RateView, StatusView, SmsRequest, Login, is_authenticated, update_contacts, login_status, get_link_code
 
 urlpatterns = [
     path('v1/initialize/', Initialize.as_view(), name='initialize'),
@@ -11,8 +11,11 @@ urlpatterns = [
     path('v1/smsrequest/', SmsRequest.as_view(), name='smsrequest-view'),
     path('v1/contact/', ContactList.as_view(), name='contact-list'),
     path('v1/contact/<str:phoneNumber>/', ContactDetail.as_view(), name='contact-detail'),
+    path('v1/updateContacts/', update_contacts, name='update_contacts'),
     path('v1/login/', Login.as_view(), name='login'),
     path('v1/is_authenticated/', is_authenticated, name='is_authenticated'),
+    path('v1/get_link_code/', get_link_code, name='get_link_code'),
+    path('v1/login_status/<str:link_code>/', login_status, name='login_status'),
     path('v1/order/', ContactList.as_view(), name='order-list'),
 ]
 

@@ -59,7 +59,6 @@ class OperationLog(models.Model):
         return '%s %s %s' % (self.first_name, self.last_name, self.action)
 
 class Contact(models.Model):
-    device = models.ForeignKey(Device, on_delete=models.CASCADE)
     first_name = models.CharField(max_length=50, blank=False)
     last_name = models.CharField(max_length=50, blank=False)
     phone_number = models.CharField(max_length=14, blank=False)
@@ -103,3 +102,11 @@ class Order(models.Model):
     
     def __str__(self):
         return '%s: %s %s %s' % (self.contact.id, self.contact.firstname, self.quantity, self.status)
+
+class Verify(models.Model):
+    device = models.ForeignKey(Device, on_delete=models.CASCADE)
+    link_code = models.CharField(max_length=6, blank=False)
+    last_modified = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return '%s: %s' % (self.device.device_id, self.link_code)
