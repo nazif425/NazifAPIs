@@ -39,10 +39,8 @@ class ContactSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Contact
-        fields = ["id","device","first_name","last_name","phone_number","notification"]
-        extra_kwargs = {
-            'device': {'required': False}
-        }
+        fields = ["id","first_name","last_name","phone_number","notification"]
+
 
 class QuantitySerializer(serializers.ModelSerializer):
     
@@ -84,7 +82,7 @@ class OrderSerializer(serializers.ModelSerializer):
         contact_data = validated_data.pop('contact')
         device_pk = validated_data.pop('seller')
         
-        device = Device.ojects.objects.filter(pk=device_pk)
+        device = Device.objects.filter(pk=device_pk)
         
         if device.exists():
             validated_data['seller'] = device[0]        
